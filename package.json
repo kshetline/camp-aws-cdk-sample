@@ -9,7 +9,8 @@
     "watch": "tsc -w",
     "test": "jest",
     "deploy-only": "cdk deploy --execute",
-    "deploy": "npm run build && npm run deploy-only"
+    "deploy": "npm run build && npm run deploy-only",
+    "create-sam-templates": "cdk synth --no-staging > template.yaml"
   },
   "dependencies": {
     "@aws-cdk/aws-lambda": "^1.19.0",
@@ -22,14 +23,15 @@
     "@aws-cdk/assert": "^1.19.0",
     "@aws-cdk/aws-apigateway": "^1.19.0",
     "@types/axios": "^0.14.0",
-    "@types/jest": "^24.0.22",
-    "@types/node": "10.17.5",
+    "@types/jest": "^24.0.25",
+    "@types/node": "13.1.4",
     "aws-cdk": "^1.19.0",
     "copy-node-modules": "^1.1.1",
     "del-cli": "^3.0.0",
     "jest": "^24.9.0",
-    "ts-jest": "^24.1.0",
-    "ts-node": "^8.1.0",
+    "lodash": "^4.17.15",
+    "ts-jest": "^24.2.0",
+    "ts-node": "^8.5.4",
     "typescript": "~3.7.4"
   }
 }

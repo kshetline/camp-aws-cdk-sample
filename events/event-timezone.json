@@ -1,0 +1,10 @@
+{
+  "body": "{\"message\": \"getTimezone\"}",
+  "resource": "/{proxy+}",
+  "path": "/get-timezone",
+  "httpMethod": "GET",
+  "isBase64Encoded": false,
+  "queryStringParameters": {
+    "city": "anchorage, ak"
+  }
+}

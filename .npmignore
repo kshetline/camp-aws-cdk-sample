@@ -4,3 +4,7 @@
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+
+# other
+/template.yaml
+/sam-test/event.json
