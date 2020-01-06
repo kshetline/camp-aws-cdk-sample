@@ -1,0 +1,35 @@
+{
+  "name": "camp-sample-cdk",
+  "version": "0.1.0",
+  "bin": {
+    "camp-sample-cdk": "bin/camp-sample-cdk.js"
+  },
+  "scripts": {
+    "build": "del-cli dist && tsc && copy-node-modules . dist/nodejs/nodejs",
+    "watch": "tsc -w",
+    "test": "jest",
+    "deploy-only": "cdk deploy --execute",
+    "deploy": "npm run build && npm run deploy-only"
+  },
+  "dependencies": {
+    "@aws-cdk/aws-lambda": "^1.19.0",
+    "@aws-cdk/aws-s3": "^1.19.0",
+    "@aws-cdk/core": "^1.19.0",
+    "axios": "^0.19.0",
+    "source-map-support": "^0.5.16"
+  },
+  "devDependencies": {
+    "@aws-cdk/assert": "^1.19.0",
+    "@aws-cdk/aws-apigateway": "^1.19.0",
+    "@types/axios": "^0.14.0",
+    "@types/jest": "^24.0.22",
+    "@types/node": "10.17.5",
+    "aws-cdk": "^1.19.0",
+    "copy-node-modules": "^1.1.1",
+    "del-cli": "^3.0.0",
+    "jest": "^24.9.0",
+    "ts-jest": "^24.1.0",
+    "ts-node": "^8.1.0",
+    "typescript": "~3.7.4"
+  }
+}
