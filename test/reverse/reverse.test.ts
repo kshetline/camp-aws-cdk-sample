@@ -1,4 +1,4 @@
-import { reverse } from '../../lib/reverse/reverse';
+import { reverse } from '../../lib/reverse/index';
 
 test('should reverse strings', async () => {
   const event = { queryStringParameters: { s: 'abc' } };

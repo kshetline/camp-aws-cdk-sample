@@ -9,6 +9,7 @@
     "watch": "tsc -w",
     "test": "jest",
     "test-local": "node sam-test/sam-test.js",
+    "test-local-debug": "node sam-test/sam-test.js -- -d",
     "deploy-only": "cdk deploy --execute",
     "deploy": "npm run build && npm run deploy-only",
     "create-sam-templates": "cdk synth --no-staging > template.yaml"

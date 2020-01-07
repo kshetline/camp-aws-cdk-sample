@@ -1,4 +1,4 @@
-import { getTimezone } from '../../lib/get-timezone/get-timezone';
+import { getTimezone } from '../../lib/get-timezone/index';
 
 function extractZone(result: any): string | undefined {
   if (result && result.statusCode === 200 && typeof result.body === 'string') {

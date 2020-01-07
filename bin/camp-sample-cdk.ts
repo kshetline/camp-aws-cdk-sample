@@ -19,14 +19,14 @@ const commonLayer = new lambda.LayerVersion(stack, 'CampSampleCommon', {
 
 const getTimeZone = new lambda.Function(stack, 'getTimezone', {
   runtime: lambda.Runtime.NODEJS_12_X,
-  handler: 'get-timezone.getTimezone',
+  handler: 'index.getTimezone',
   code: lambda.Code.fromAsset('dist/lib/get-timezone'),
   layers: [commonLayer]
 });
 
 const reverse = new lambda.Function(stack, 'reverse', {
   runtime: lambda.Runtime.NODEJS_12_X,
-  handler: 'reverse.reverse',
+  handler: 'index.reverse',
   code: lambda.Code.fromAsset('dist/lib/reverse'),
   layers: [commonLayer]
 });

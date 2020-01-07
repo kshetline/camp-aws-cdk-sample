@@ -9,11 +9,11 @@ const FAIL_MARK = '\u2718';
 const testEventInfo = {
   getTimezone: [
     {
-      testName: "should get correct timezone for Anchorage",
+      testName: "should get correct timezone for Fairbanks",
       queryStringParameters: {
-        city: "anchorage, ak"
+        city: "fairbanks, ak"
       },
-      expectedResult: [{city: 'Anchorage, AK', zone: 'America/Anchorage' }]
+      expectedResult: [{city: 'Fairbanks, AK', zone: 'America/Anchorage' }]
     },
     {
       testName: "should get correct timezone for Marseille",
@@ -36,12 +36,21 @@ const testEventInfo = {
       queryStringParameters: {
         s: "bar"
       },
-      expectedResult: body => body === 'rab'
+      expectedStatus: 200, // 200 is the default, so not needed here, but you can specify other status values
+      expectedResult: body => body === 'rab' // Use functions for more elaborate results testing
     }
   ]
 };
 
 let lines;
+let debugMode = false;
+
+process.argv.forEach(arg => {
+  if (arg === '-d') {
+    debugMode = true;
+    console.log(chalk.magenta('Debug mode'));
+  }
+});
 
 try {
   lines = fs.readFileSync('./template.yaml', { encoding: 'utf-8' }).split(/\r\n|\n|\r/);
@@ -56,7 +65,7 @@ let successCount = 0;
 
 lines.forEach(line => {
   if (/^\s*Type\: AWS\:\:Lambda\:\:Function\s*$/.test(line)) {
-    const $ = /\s*(\w*?)([0-9A-Z]*):\s*$/.exec(lastLine);
+    const $ = /\s*(\w*)([0-9A-Z]{8}):\s*$/.exec(lastLine);
 
     if ($) {
       const name = $[1];
@@ -88,13 +97,20 @@ lines.forEach(line => {
           Object.assign(template, eventInfo);
 
           fs.writeFileSync('sam-test/event.json', JSON.stringify(template, null, 2), { encoding: 'utf-8' });
-          const results = spawnSync('sam', [
-            'local',
-            'invoke',
-            '-e',
-            '"sam-test/event.json"',
-            fullName
-          ], { encoding: 'utf-8', shell: true });
+
+          const args = [
+              'local',
+              'invoke',
+              '-e',
+              '"sam-test/event.json"',
+              fullName
+            ];
+
+          if (debugMode) {
+            args.push('-d', '5858');
+          }
+
+          const results = spawnSync('sam', args, { encoding: 'utf-8', shell: true });
 
           if (results.stderr && results.stderr.startsWith('Traceback ')) {
             console.log(chalk.red(FAIL_MARK));
