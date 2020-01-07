@@ -8,6 +8,7 @@
     "build": "del-cli dist && tsc && copy-node-modules . dist/nodejs/nodejs",
     "watch": "tsc -w",
     "test": "jest",
+    "test-local": "node sam-test/sam-test.js",
     "deploy-only": "cdk deploy --execute",
     "deploy": "npm run build && npm run deploy-only",
     "create-sam-templates": "cdk synth --no-staging > template.yaml"
@@ -26,6 +27,7 @@
     "@types/jest": "^24.0.25",
     "@types/node": "13.1.4",
     "aws-cdk": "^1.19.0",
+    "chalk": "^3.0.0",
     "copy-node-modules": "^1.1.1",
     "del-cli": "^3.0.0",
     "jest": "^24.9.0",
