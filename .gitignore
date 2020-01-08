@@ -8,5 +8,6 @@ node_modules
 cdk.out
 
 # other
+/dist
 /template.yaml
 /sam-test/event.json

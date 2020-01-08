@@ -44,18 +44,31 @@ const testEventInfo = {
 
 let lines;
 let debugMode = false;
+let singleFunctionName = '';
+let singleFunctionIndex = 0;
 
 process.argv.forEach(arg => {
-  if (arg === '-d') {
+  if (singleFunctionIndex === -1) {
+    [singleFunctionName, singleFunctionIndex] = arg.split('.').map((s, index) => index === 1 ? Number(s) : s);
+  }
+  else if (arg === '-f') {
+    singleFunctionIndex = -1;
+  }
+  else if (arg === '-d') {
     debugMode = true;
     console.log(chalk.magenta('Debug mode'));
   }
 });
 
+if (debugMode && (!singleFunctionName || singleFunctionIndex < 1)) {
+  console.error(chalk.red('Debug mode requires a single function to be specified via -f'));
+  process.exit(1);
+}
+
 try {
   lines = fs.readFileSync('./template.yaml', { encoding: 'utf-8' }).split(/\r\n|\n|\r/);
 } catch (err) {
-  console.error('template.yaml not found');
+  console.error(chalk.red('template.yaml not found'));
   process.exit(1);
 }
 
@@ -73,9 +86,15 @@ lines.forEach(line => {
       const events = testEventInfo[name];
 
       if (events && events.length > 0) {
-        console.log(chalk.blue(name), chalk.gray('(' + fullName + ')'));
+        if (!singleFunctionName || singleFunctionName === name) {
+          console.log(chalk.blue(name), chalk.gray('(' + fullName + ')'));
+        }
 
         events.forEach((eventInfo, index) => {
+          if (singleFunctionName && (singleFunctionName !== name || singleFunctionIndex !== index + 1)) {
+            return;
+          }
+
           ++testCount;
 
           const testName = eventInfo.testName;
@@ -102,17 +121,18 @@ lines.forEach(line => {
               'local',
               'invoke',
               '-e',
-              '"sam-test/event.json"',
-              fullName
+              '"sam-test/event.json"'
             ];
 
           if (debugMode) {
             args.push('-d', '5858');
           }
 
+          args.push(fullName);
+
           const results = spawnSync('sam', args, { encoding: 'utf-8', shell: true });
 
-          if (results.stderr && results.stderr.startsWith('Traceback ')) {
+          if (results.stderr && (!results.stdout || results.stderr.startsWith('Traceback '))) {
             console.log(chalk.red(FAIL_MARK));
             console.error(chalk.red('    Test failed: ' + results.stderr));
           }
@@ -122,8 +142,15 @@ lines.forEach(line => {
             try {
               value = JSON.parse(results.stdout);
 
-              if (value && value.statusCode != null && value.body) {
-                value.body = JSON.parse(value.body);
+              if (value.errorType) {
+                console.log(chalk.red(FAIL_MARK));
+                console.error(chalk.red(`    ${value.errorType}${value.errorMessage ? ': ' + value.errorMessage : ''}`));
+              }
+              else if (value && value.statusCode != null && value.body) {
+                try {
+                  value.body = JSON.parse(value.body);
+                }
+                catch (err) {} // Leave value.body as string if it's not valid JSON
 
                 if (value.statusCode === expectedStatus && testSucceeds(expectedResult, value.body)) {
                   ++successCount;
@@ -131,11 +158,12 @@ lines.forEach(line => {
                 }
                 else {
                   console.log(chalk.red(FAIL_MARK));
+                  console.error(chalk.red(`    response: ${results.stdout}`));
                 }
               }
               else {
                 console.log(chalk.red(FAIL_MARK));
-                console.error(chalk.red(`    Malformed response: ${results.stdout}\n    ${err}`));
+                console.error(chalk.red(`    Malformed response: ${results.stdout}`));
               }
             }
             catch (err) {
@@ -159,6 +187,8 @@ lines.forEach(line => {
 console.log(`\nTest count: ${testCount}` +
   (successCount > 0 ? ', ' + chalk.green(`succeeded: ${successCount}`) : '') +
   (testCount - successCount > 0 ? ', ' + chalk.red(`failed: ${testCount - successCount}`) : ''));
+
+process.exit(testCount === successCount ? 0 : 1);
 
 function testSucceeds(expectedResult, body) {
   if (typeof expectedResult === 'function') {
