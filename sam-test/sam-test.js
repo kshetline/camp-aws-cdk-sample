@@ -6,6 +6,8 @@ const { isMatch } = require('lodash');
 const CHECK_MARK = '\u2714';
 const FAIL_MARK = '\u2718';
 
+// Modify testEventInfo to contain all of the lambdas you want to test, and one or more
+// tests for each lambda.
 const testEventInfo = {
   getTimezone: [
     {
@@ -50,11 +52,9 @@ let singleFunctionIndex = 0;
 process.argv.forEach(arg => {
   if (singleFunctionIndex === -1) {
     [singleFunctionName, singleFunctionIndex] = arg.split('.').map((s, index) => index === 1 ? Number(s) : s);
-  }
-  else if (arg === '-f') {
+  } else if (arg === '-f') {
     singleFunctionIndex = -1;
-  }
-  else if (arg === '-d') {
+  } else if (arg === '-d') {
     debugMode = true;
     console.log(chalk.magenta('Debug mode'));
   }
@@ -135,8 +135,7 @@ lines.forEach(line => {
           if (results.stderr && (!results.stdout || results.stderr.startsWith('Traceback '))) {
             console.log(chalk.red(FAIL_MARK));
             console.error(chalk.red('    Test failed: ' + results.stderr));
-          }
-          else {
+          } else {
             let value;
 
             try {
@@ -145,28 +144,23 @@ lines.forEach(line => {
               if (value.errorType) {
                 console.log(chalk.red(FAIL_MARK));
                 console.error(chalk.red(`    ${value.errorType}${value.errorMessage ? ': ' + value.errorMessage : ''}`));
-              }
-              else if (value && value.statusCode != null && value.body) {
+              } else if (value && value.statusCode != null && value.body) {
                 try {
                   value.body = JSON.parse(value.body);
-                }
-                catch (err) {} // Leave value.body as string if it's not valid JSON
+                } catch (err) {} // Leave value.body as string if it's not valid JSON
 
                 if (value.statusCode === expectedStatus && testSucceeds(expectedResult, value.body)) {
                   ++successCount;
                   console.log(chalk.green(CHECK_MARK));
-                }
-                else {
+                } else {
                   console.log(chalk.red(FAIL_MARK));
                   console.error(chalk.red(`    response: ${results.stdout}`));
                 }
-              }
-              else {
+              } else {
                 console.log(chalk.red(FAIL_MARK));
                 console.error(chalk.red(`    Malformed response: ${results.stdout}`));
               }
-            }
-            catch (err) {
+            } catch (err) {
               console.log(chalk.red(FAIL_MARK));
               console.error(chalk.red(`    Malformed response: ${results.stdout}\n    ${err}`));
             }
@@ -178,8 +172,7 @@ lines.forEach(line => {
 
   try {
     fs.unlinkSync('sam-test/event.json');
-  }
-  catch (err) {}
+  } catch (err) {}
 
   lastLine = line;
 });
@@ -193,8 +186,7 @@ process.exit(testCount === successCount ? 0 : 1);
 function testSucceeds(expectedResult, body) {
   if (typeof expectedResult === 'function') {
     return expectedResult(body);
-  }
-  else {
+  } else {
     return isMatch(body, expectedResult);
   }
 }

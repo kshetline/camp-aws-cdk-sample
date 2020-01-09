@@ -34,17 +34,18 @@ export async function getTimezone(event: any): Promise<any> {
         names.add(match.displayName);
         results.push({ city: match.displayName, zone: match.zone });
 
-        if (normalize(match.displayName) === normalized)
+        if (normalize(match.displayName) === normalized) {
           fullMatches.push(results[results.length - 1]);
+        }
       }
     });
 
-    if (fullMatches.length > 0)
+    if (fullMatches.length > 0) {
       results = fullMatches;
+    }
 
     return { statusCode: 200, body: JSON.stringify(results) };
-  }
-  catch (err) {
+  } catch (err) {
     return { statusCode: 500, body: err.toString() };
   }
 }

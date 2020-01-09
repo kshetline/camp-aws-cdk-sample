@@ -4,8 +4,9 @@ function extractZone(result: any): string | undefined {
   if (result && result.statusCode === 200 && typeof result.body === 'string') {
     const matches: any = JSON.parse(result.body);
 
-    if (matches && matches.length > 0)
+    if (matches && matches.length > 0) {
       return matches[0].zone;
+    }
   }
 
   return undefined;

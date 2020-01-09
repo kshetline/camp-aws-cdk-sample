@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "tasks": [{
+    "label": "test-local-debug",
+    "type": "shell",
+    "isBackground": true,
+    "command": "node sam-test/sam-test.js -- -d -f getTimezone.1",
+    "problemMatcher": [{
+      "pattern": [{
+        "regexp": ".",
+        "file": 1,
+        "location": 2,
+        "message": 3
+      }],
+      "background": {
+        "activeOnStart": true,
+        "beginsPattern": ".",
+        "endsPattern": ".",
+      }
+    }]
+  }]
+}

@@ -5,6 +5,7 @@ export class CampSampleStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    // tslint:disable-next-line: no-unused-expression
     new s3.Bucket(this, 'CampSampleBucket', {
       versioned: true
     });

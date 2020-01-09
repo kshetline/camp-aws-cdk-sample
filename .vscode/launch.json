@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [{
+      "name": "SAM debug",
+      "type": "node",
+      "request": "attach",
+      "address": "localhost",
+      "port": 5858,
+      "localRoot": "${workspaceRoot}/dist/lib/get-timezone",
+      "remoteRoot": "/var/task",
+      "protocol": "inspector",
+      "stopOnEntry": false,
+      "preLaunchTask": "test-local-debug",
+      "outFiles": [
+        "${workspaceRoot}/dist/lib/get-timezone/**/*.js"
+      ],
+      "sourceMaps": true
+    },
+    {
+      "name": "Jest Test",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}\\node_modules\\jest\\bin\\jest",
+      "args": ["--runInBand", "--config=${workspaceFolder}\\jest.config.js", "--testTimeout=3600000"],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    }
+  ]
+}

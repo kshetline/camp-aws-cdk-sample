@@ -9,10 +9,10 @@
     "watch": "tsc -w",
     "test": "jest",
     "test-local": "node sam-test/sam-test.js",
-    "test-local-debug": "node sam-test/sam-test.js -- -d -f getTimezone.1",
     "deploy-only": "cdk deploy --execute",
     "deploy": "npm run build && npm run deploy-only",
-    "create-sam-template": "cdk synth --no-staging > template.yaml"
+    "create-sam-template": "cdk synth --no-staging > template.yaml",
+    "lint": "tslint --project ."
   },
   "dependencies": {
     "@aws-cdk/aws-lambda": "^1.19.0",
@@ -36,6 +36,7 @@
     "lodash": "^4.17.15",
     "ts-jest": "^24.2.0",
     "ts-node": "^8.5.4",
+    "tslint": "^6.0.0-beta0",
     "typescript": "~3.7.4"
   }
 }
