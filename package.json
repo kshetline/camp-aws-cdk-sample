@@ -11,7 +11,7 @@
     "test-local": "ts-node sam-test/sam-test.ts",
     "deploy-only": "cdk deploy --execute",
     "deploy": "npm run build && npm run deploy-only",
-    "create-sam-template": "cdk synth --no-staging > template.yaml",
+    "synth-ns": "cdk synth --no-staging > template.yaml",
     "lint": "tslint --project ."
   },
   "dependencies": {

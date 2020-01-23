@@ -31,6 +31,13 @@ const reverse = new lambda.Function(stack, 'reverse', {
   layers: [commonLayer]
 });
 
+const messageReceiver = new lambda.Function(stack, 'messageReceiver', {
+  runtime: lambda.Runtime.NODEJS_12_X,
+  handler: 'index.receiveMessage',
+  code: lambda.Code.fromAsset('dist/lib/message-receiver'),
+  layers: [commonLayer]
+});
+
 const api = new RestApi(stack, 'camp-aws-sample');
 
 api.root.addResource('get-timezone').addMethod('GET', new LambdaIntegration(getTimeZone));

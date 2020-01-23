@@ -5,42 +5,12 @@ import { isMatch } from 'lodash';
 
 const TEST_PROPERTIES = ['testName', 'env', 'setup', 'expectedStatus', 'expectedResult', 'displayResult'];
 
-// Modify testEventInfo to contain all of the lambdas you want to test, and one or more
-// tests for each lambda.
+// Register tests in testEventInfo:
+//   testName: require('./test-file-name.stest').default,
 const testEventInfo: any = {
-  getTimezone: [
-    {
-      testName: "should get correct timezone for Fairbanks",
-      queryStringParameters: {
-        city: "fairbanks, ak"
-      },
-      expectedResult: [{city: 'Fairbanks, AK', zone: 'America/Anchorage' }]
-    },
-    {
-      testName: "should get correct timezone for Marseille",
-      queryStringParameters: {
-        city: "Marseille, FRA"
-      },
-      expectedResult: [{zone: 'Europe/Paris' }] // Note: comparison to full result not required
-    }
-  ],
-  reverse: [
-    {
-      testName: "should reverse string",
-      queryStringParameters: {
-        s: "foo"
-      },
-      expectedResult: 'oof'
-    },
-    {
-      testName: "should reverse string with function to test result",
-      queryStringParameters: {
-        s: "bar"
-      },
-      expectedStatus: 200, // 200 is the default, so not needed here, but you can specify other status values
-      expectedResult: (value: any) => value.body === 'rab' // Use functions for more elaborate results testing
-    }
-  ]
+  getTimezone: require('./get-timezone.stest').default,
+  reverse: require('./reverse.stest').default,
+  messageReceiver: require('./message-receiver.stest').default,
 };
 
 const CHECK_MARK = '\u2714';
@@ -80,36 +50,38 @@ let lastLine = '';
 let testCount = 0;
 let successCount = 0;
 
-lines.forEach(line => {
-  if (/^\s*Type: AWS::Lambda::Function\s*$/.test(line)) {
-    const $ = /\s*(\w*)([0-9A-Z]{8}):\s*$/.exec(lastLine);
+(async () => {
+  for (const line of lines) {
+    if (/^\s*Type: AWS::Lambda::Function\s*$/.test(line)) {
+      const $ = /\s*(\w*)([0-9A-Z]{8}):\s*$/.exec(lastLine);
 
-    if ($) {
-      const name = $[1];
+      if ($) {
+        const name = $[1];
 
-      performLambdaEvents(name, name + $[2], testEventInfo[name]);
+        await performLambdaEvents(name, name + $[2], testEventInfo[name]);
+      }
     }
+
+    try {
+      fs.unlinkSync('sam-test/event.json');
+    } catch (err) { }
+
+    try {
+      fs.unlinkSync('sam-test/env.json');
+    } catch (err) { }
+
+    lastLine = line;
   }
 
-  try {
-    fs.unlinkSync('sam-test/event.json');
-  } catch (err) { }
+  // tslint:disable-next-line: prefer-template
+  console.log(`\nTest count: ${testCount}` +
+    (successCount > 0 ? ', ' + chalk.green(`succeeded: ${successCount}`) : '') +
+    (testCount - successCount > 0 ? ', ' + chalk.red(`failed: ${testCount - successCount}`) : ''));
 
-  try {
-    fs.unlinkSync('sam-test/env.json');
-  } catch (err) { }
+  process.exit(testCount === successCount ? 0 : 1);
+})();
 
-  lastLine = line;
-});
-
-// tslint:disable-next-line: prefer-template
-console.log(`\nTest count: ${testCount}` +
-  (successCount > 0 ? ', ' + chalk.green(`succeeded: ${successCount}`) : '') +
-  (testCount - successCount > 0 ? ', ' + chalk.red(`failed: ${testCount - successCount}`) : ''));
-
-process.exit(testCount === successCount ? 0 : 1);
-
-function performLambdaEvents(name: string, fullName: string, events: any[]): void {
+async function performLambdaEvents(name: string, fullName: string, events: any[]): Promise<void> {
   if (!events || events.length === 0) {
     return;
   }
@@ -118,10 +90,12 @@ function performLambdaEvents(name: string, fullName: string, events: any[]): voi
     console.log(chalk.blue(name), chalk.gray(`(${fullName})`));
   }
 
-  events.forEach((eventInfo, index) => performLambdaEvent(name, fullName, eventInfo, index));
+  for (let i = 0; i < events.length; ++i) {
+    await performLambdaEvent(name, fullName, events[i], i);
+  }
 }
 
-function performLambdaEvent(name: string, fullName: string, eventInfo: any, index: number): void {
+async function performLambdaEvent(name: string, fullName: string, eventInfo: any, index: number): Promise<void> {
   if (singleFunctionName && (singleFunctionName !== name || (singleFunctionIndex > 0 && singleFunctionIndex !== index + 1))) {
     return;
   }
@@ -161,14 +135,18 @@ function performLambdaEvent(name: string, fullName: string, eventInfo: any, inde
   args.push(fullName);
 
   if (testParams.setup) {
-    testParams.setup();
+    const possiblePromise = testParams.setup();
+
+    if (possiblePromise instanceof Promise) {
+      await possiblePromise;
+    }
   }
 
-  invokeSam(testParams, args);
+  await invokeSam(testParams, args);
 }
 
 // tslint:disable-next-line: cyclomatic-complexity
-function invokeSam(testParams: any, args: string[]): void {
+async function invokeSam(testParams: any, args: string[]): Promise<void> {
   const results = spawnSync('sam', args, { encoding: 'utf-8', shell: true });
   const stdout = (results.stdout ?? '').toString();
   const stderr = (results.stderr ?? '').toString();
@@ -177,7 +155,7 @@ function invokeSam(testParams: any, args: string[]): void {
     console.log(chalk.red(FAIL_MARK));
     console.error(chalk.red('    Test failed: ' + stderr));
   } else {
-    let value;
+    let value: any;
 
     try {
       value = JSON.parse(stdout);
@@ -190,7 +168,7 @@ function invokeSam(testParams: any, args: string[]): void {
           value.body = JSON.parse(value.body);
         } catch (err) { } // Leave value.body as string if it's not valid JSON
 
-        if (value.statusCode === testParams.expectedStatus && testSucceeds(testParams.expectedResult, value)) {
+        if (value.statusCode === testParams.expectedStatus && await testSucceeds(testParams.expectedResult, value)) {
           ++successCount;
           console.log(chalk.green(CHECK_MARK));
 
@@ -227,9 +205,15 @@ function extractTestParams(eventInfo: any): any {
   return testParams;
 }
 
-function testSucceeds(expectedResult: any, value: any): boolean {
+async function testSucceeds(expectedResult: any, value: any): Promise<boolean> {
   if (typeof expectedResult === 'function') {
-    return expectedResult(value);
+    const result = expectedResult(value);
+
+    if (result instanceof Promise) {
+      return !!(await result);
+    } else {
+      return !!result;
+    }
   } else {
     return isMatch(value.body, expectedResult);
   }

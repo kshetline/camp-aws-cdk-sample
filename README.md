@@ -9,8 +9,8 @@ The `cdk.json` file tells the CDK Toolkit how to execute your app.
 * `npm run build`: compile typescript to js
 * `npm run watch`: watch for changes and compile
 * `npm run test`: perform the jest unit tests
-* `npm run create-sam-template`: create/update SAM template needed for SAM testing
-* `npm run test-local`: perform SAM invoke local testing (You may need to perform `create-sam-template` before using this test)
+* `npm run synth-ns`: create/update SAM template needed for SAM testing
+* `npm run test-local`: perform SAM invoke local testing (You may need to perform `synth-ns` before using this test)
 * `npm run deploy`: build and deploy this stack to your default AWS account/region
 * `npm run deploy-only`: deploy this stack to your default AWS account/region without first doing a build
 
@@ -28,7 +28,7 @@ Run the VSCode "Jest Test" `launch.json` configuration.
 
 Run the VSCode "SAM Test" `launch.json` configuration.
 
-You may need to perform `create-sam-template` before using these tests.
+You may need to perform `synth-ns` before using these tests.
 
 This will test only one single pre-defined lambda function with one predefined event. To test multiple lambdas and events, either create additional `launch.json` configurations and corresponding tasks in `tasks.json` for each lambda and event to be tested, or modify the existing "SAM Test" configuration and corresponding task as needed.
 
