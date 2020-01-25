@@ -1,6 +1,6 @@
 import AWS, { Lambda } from 'aws-sdk';
 import chalk from 'chalk';
-import { ChildProcess, exec, spawnSync } from 'child_process';
+import { ChildProcess, exec, execSync } from 'child_process';
 import * as fs from 'fs';
 import { isMatch } from 'lodash';
 
@@ -19,9 +19,19 @@ const testEventInfo: any = {
 const CHECK_MARK = '\u2714';
 const FAIL_MARK = '\u2718';
 
-const lambda = new Lambda({ apiVersion: '2015-03-31', endpoint: 'http://127.0.0.1:3001', sslEnabled: false });
+const PYTHON_TASK_PATTERN = /^python\.exe\s+(\d+)\s+Console\s+/;
+
+const lambda = new Lambda({
+  apiVersion: '2015-03-31',
+  endpoint: 'http://127.0.0.1:3001',
+  sslEnabled: false,
+  maxRetries: 0
+});
 
 let samProcess: ChildProcess = null as any;
+let pythonProcesses = new Set<string>();
+let samPythonProcessId = '';
+let samFailed = false;
 let lines: string[];
 let debugMode = false;
 let singleFunctionName = '';
@@ -65,26 +75,28 @@ let successCount = 0;
         const name = $[1];
 
         await performLambdaEvents(name, name + $[2], testEventInfo[name]);
+
+        if (samFailed) {
+          break;
+        }
       }
     }
 
-    try {
-      fs.unlinkSync('sam-test/event.json');
-    } catch (err) { }
-
-    try {
-      fs.unlinkSync('sam-test/env.json');
-    } catch (err) { }
+    // try {
+    //   fs.unlinkSync('sam-test/env.json');
+    // } catch (err) { }
 
     lastLine = line;
   }
 
   samStopLambdas();
 
-  // tslint:disable-next-line: prefer-template
-  console.log(`\nTest count: ${testCount}` +
-    (successCount > 0 ? ', ' + chalk.green(`succeeded: ${successCount}`) : '') +
-    (testCount - successCount > 0 ? ', ' + chalk.red(`failed: ${testCount - successCount}`) : ''));
+  if (!samFailed) {
+    // tslint:disable-next-line: prefer-template
+    console.log(`\nTest count: ${testCount}` +
+      (successCount > 0 ? ', ' + chalk.green(`succeeded: ${successCount}`) : '') +
+      (testCount - successCount > 0 ? ', ' + chalk.red(`failed: ${testCount - successCount}`) : ''));
+  }
 
   process.exit(testCount === successCount ? 0 : 1);
 })();
@@ -98,7 +110,7 @@ async function performLambdaEvents(name: string, fullName: string, events: any[]
     console.log(chalk.blue(name), chalk.gray(`(${fullName})`));
   }
 
-  for (let i = 0; i < events.length; ++i) {
+  for (let i = 0; i < events.length && !samFailed; ++i) {
     await performLambdaEvent(name, fullName, events[i], i);
   }
 }
@@ -113,7 +125,8 @@ async function performLambdaEvent(name: string, fullName: string, eventInfo: any
   try {
     await samStartLambdas();
   } catch (err) {
-    console.error(chalk.red('Failed to start API: ' + err));
+    samFailed = true;
+    console.error(chalk.red('Failed to start lambdas: ' + err));
 
     return;
   }
@@ -154,7 +167,6 @@ async function performLambdaEvent(name: string, fullName: string, eventInfo: any
 async function invokeLambda(testParams: any, lambdaParams: Lambda.InvocationRequest): Promise<void> {
   let results: Lambda.InvocationResponse;
 
-  lambdaParams.InvocationType
   try {
     results = await lambda.invoke(lambdaParams).promise();
   } catch (err) {
@@ -164,14 +176,8 @@ async function invokeLambda(testParams: any, lambdaParams: Lambda.InvocationRequ
     return;
   }
 
-  const payload = JSON.stringify(results?.Payload || '');
+  const payload = (results?.Payload || '').toString();
   let value: any;
-
-  if (samProcess) {
-    ++successCount;
-    console.log(chalk.green(CHECK_MARK));
-    return;
-  }
 
   try {
     value = JSON.parse(payload);
@@ -245,12 +251,15 @@ async function samStartLambdas(): Promise<void> {
     args.push('-d', '5858');
   }
 
+  findExistingPythonProcesses();
   samProcess = exec(['sam', ...args].join(' '));
 
   // Give the process some time to start up and be ready to receive events.
   return new Promise<void>((resolve, reject) => {
     let resolved = false;
     let rejected = false;
+    let output = '';
+    let timer: any;
 
     samProcess.on('error', err => {
       if (!resolved) {
@@ -259,20 +268,86 @@ async function samStartLambdas(): Promise<void> {
       }
     });
   
-    setTimeout(() => {
-      if (!rejected) {
+    const monitorStderr = (data: any) => {
+      output += data.toString();
+
+      if (!resolved && !rejected && output.includes('(Press CTRL+C to quit)')) {
+        if (timer) {
+          clearTimeout(timer);
+          timer = undefined;
+        }
+
         resolved = true;
+        findNewPythonProcess();
+        // samProcess.stderr?.off('data', monitorStderr);
+        resolve();
+      }
+    };
+  
+    samProcess.stderr?.on('data', monitorStderr);
+
+    // samProcess.stderr?.on('data', data => {
+    //   if (!resolved && !rejected) {
+    //     if (timer) {
+    //       clearTimeout(timer);
+    //       timer = undefined;
+    //     }
+
+    //     rejected = true;
+    //     reject(new Error(data.toString()));
+    //   }
+    // });
+
+    timer = setTimeout(() => {
+      timer = undefined;
+
+      if (!resolved && !rejected) {
+        resolved = true;
+        findNewPythonProcess();
         resolve();
       }
     }, 15000);
   });
 }
 
+function findExistingPythonProcesses(): void {
+  try {
+    const tasks = execSync('tasklist').toString().split(/\r\n|\r|\n/);
+    tasks.forEach(task => {
+      const $ = PYTHON_TASK_PATTERN.exec(task);
+
+      if ($) {
+        pythonProcesses.add($[1]);
+      }
+    });
+  }
+  catch (err) {}
+}
+
+function findNewPythonProcess(): void {
+  try {
+    const tasks = execSync('tasklist').toString().split(/\r\n|\r|\n/);
+    for (let task of tasks) {
+      const $ = PYTHON_TASK_PATTERN.exec(task);
+
+      if ($ && !pythonProcesses.has($[1])) {
+        samPythonProcessId = $[1];
+        break;
+      }
+    }
+  }
+  catch (err) {}
+}
+
 function samStopLambdas(): void {
-  if (samProcess?.connected) {
-    console.log('disconnecting...');
-    samProcess.disconnect();
-  } else {
-    console.log('not disconnecting');
+  if (samProcess?.kill && !samProcess.killed) {
+    samProcess.kill();
+
+    if (samPythonProcessId) {
+      try {
+        execSync('taskkill /f /pid ' + samPythonProcessId);
+        samPythonProcessId = '';
+      } catch (err) {}
+    }
   }
 }
