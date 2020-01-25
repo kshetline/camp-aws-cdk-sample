@@ -1,7 +1,10 @@
-import * as fs from 'fs';
+import AWS, { Lambda } from 'aws-sdk';
 import chalk from 'chalk';
-import { spawnSync } from 'child_process';
+import { ChildProcess, exec, spawnSync } from 'child_process';
+import * as fs from 'fs';
 import { isMatch } from 'lodash';
+
+AWS.config.update({ region: 'none' }); // The region doesn't appear to be used, but needs to be specified anyway.
 
 const TEST_PROPERTIES = ['testName', 'env', 'setup', 'expectedStatus', 'expectedResult', 'displayResult'];
 
@@ -16,6 +19,9 @@ const testEventInfo: any = {
 const CHECK_MARK = '\u2714';
 const FAIL_MARK = '\u2718';
 
+const lambda = new Lambda({ apiVersion: '2015-03-31', endpoint: 'http://127.0.0.1:3001', sslEnabled: false });
+
+let samProcess: ChildProcess = null as any;
 let lines: string[];
 let debugMode = false;
 let singleFunctionName = '';
@@ -73,6 +79,8 @@ let successCount = 0;
     lastLine = line;
   }
 
+  samStopLambdas();
+
   // tslint:disable-next-line: prefer-template
   console.log(`\nTest count: ${testCount}` +
     (successCount > 0 ? ', ' + chalk.green(`succeeded: ${successCount}`) : '') +
@@ -102,6 +110,14 @@ async function performLambdaEvent(name: string, fullName: string, eventInfo: any
 
   ++testCount;
 
+  try {
+    await samStartLambdas();
+  } catch (err) {
+    console.error(chalk.red('Failed to start API: ' + err));
+
+    return;
+  }
+
   const testParams = extractTestParams(eventInfo);
   const template = {
     body: `{"message": "${name}"}`,
@@ -113,26 +129,15 @@ async function performLambdaEvent(name: string, fullName: string, eventInfo: any
 
   process.stdout.write(`  ${index + 1}: ${testParams.testName} `);
   Object.assign(template, eventInfo);
+  const lambdaParams: Lambda.InvocationRequest = {
+    FunctionName: fullName,
+    Payload: JSON.stringify(template)
+  };
 
-  fs.writeFileSync('sam-test/event.json', JSON.stringify(template, null, 2), { encoding: 'utf-8' });
-
-  const args = [
-    'local',
-    'invoke',
-    '-e',
-    '"sam-test/event.json"'
-  ];
-
-  if (testParams.env) {
-    fs.writeFileSync('sam-test/env.json', JSON.stringify({ [fullName]: testParams.env }));
-    args.push('--env-vars', 'sam-test/env.json');
-  }
-
-  if (debugMode) {
-    args.push('-d', '5858');
-  }
-
-  args.push(fullName);
+//  if (testParams.env) {
+//    fs.writeFileSync('sam-test/env.json', JSON.stringify({ [fullName]: testParams.env }));
+//    args.push('--env-vars', 'sam-test/env.json');
+//  }
 
   if (testParams.setup) {
     const possiblePromise = testParams.setup();
@@ -142,51 +147,61 @@ async function performLambdaEvent(name: string, fullName: string, eventInfo: any
     }
   }
 
-  await invokeSam(testParams, args);
+  await invokeLambda(testParams, lambdaParams);
 }
 
 // tslint:disable-next-line: cyclomatic-complexity
-async function invokeSam(testParams: any, args: string[]): Promise<void> {
-  const results = spawnSync('sam', args, { encoding: 'utf-8', shell: true });
-  const stdout = (results.stdout ?? '').toString();
-  const stderr = (results.stderr ?? '').toString();
+async function invokeLambda(testParams: any, lambdaParams: Lambda.InvocationRequest): Promise<void> {
+  let results: Lambda.InvocationResponse;
 
-  if (stderr && (!stdout || stderr.startsWith('Traceback '))) {
+  lambdaParams.InvocationType
+  try {
+    results = await lambda.invoke(lambdaParams).promise();
+  } catch (err) {
     console.log(chalk.red(FAIL_MARK));
-    console.error(chalk.red('    Test failed: ' + stderr));
-  } else {
-    let value: any;
+    console.error(chalk.red('    Test failed: ' + err));
 
-    try {
-      value = JSON.parse(stdout);
+    return;
+  }
 
-      if (value.errorType) {
-        console.log(chalk.red(FAIL_MARK));
-        console.error(chalk.red(`    ${value.errorType}${value.errorMessage ? ': ' + value.errorMessage : ''}`));
-      } else if (value && value.statusCode != null && typeof value.body === 'string') {
-        try {
-          value.body = JSON.parse(value.body);
-        } catch (err) { } // Leave value.body as string if it's not valid JSON
+  const payload = JSON.stringify(results?.Payload || '');
+  let value: any;
 
-        if (value.statusCode === testParams.expectedStatus && await testSucceeds(testParams.expectedResult, value)) {
-          ++successCount;
-          console.log(chalk.green(CHECK_MARK));
+  if (samProcess) {
+    ++successCount;
+    console.log(chalk.green(CHECK_MARK));
+    return;
+  }
 
-          if (testParams.displayResult) {
-            console.log(chalk.green('    ' + stdout.trim()));
-          }
-        } else {
-          console.log(chalk.red(FAIL_MARK));
-          console.error(chalk.red(`    response: ${stdout}`));
+  try {
+    value = JSON.parse(payload);
+
+    if (value.errorType) {
+      console.log(chalk.red(FAIL_MARK));
+      console.error(chalk.red(`    ${value.errorType}${value.errorMessage ? ': ' + value.errorMessage : ''}`));
+    } else if (value && value.statusCode != null && typeof value.body === 'string') {
+      try {
+        value.body = JSON.parse(value.body);
+      } catch (err) { } // Leave value.body as string if it's not valid JSON
+
+      if (value.statusCode === testParams.expectedStatus && await testSucceeds(testParams.expectedResult, value)) {
+        ++successCount;
+        console.log(chalk.green(CHECK_MARK));
+
+        if (testParams.displayResult) {
+          console.log(chalk.green('    ' + payload.trim()));
         }
       } else {
         console.log(chalk.red(FAIL_MARK));
-        console.error(chalk.red(`    Malformed response: ${stdout}`));
+        console.error(chalk.red(`    response: ${payload}`));
       }
-    } catch (err) {
+    } else {
       console.log(chalk.red(FAIL_MARK));
-      console.error(chalk.red(`    Malformed response: ${stdout}\n    ${err}`));
+      console.error(chalk.red(`    Malformed response: ${payload}`));
     }
+  } catch (err) {
+    console.log(chalk.red(FAIL_MARK));
+    console.error(chalk.red(`    Malformed response: ${payload}\n    ${err}`));
   }
 }
 
@@ -216,5 +231,48 @@ async function testSucceeds(expectedResult: any, value: any): Promise<boolean> {
     }
   } else {
     return isMatch(value.body, expectedResult);
+  }
+}
+
+async function samStartLambdas(): Promise<void> {
+  if (samProcess) {
+    return;
+  }
+
+  const args = ['local', 'start-lambda'];
+
+  if (debugMode) {
+    args.push('-d', '5858');
+  }
+
+  samProcess = exec(['sam', ...args].join(' '));
+
+  // Give the process some time to start up and be ready to receive events.
+  return new Promise<void>((resolve, reject) => {
+    let resolved = false;
+    let rejected = false;
+
+    samProcess.on('error', err => {
+      if (!resolved) {
+        rejected = true;
+        reject(err);
+      }
+    });
+  
+    setTimeout(() => {
+      if (!rejected) {
+        resolved = true;
+        resolve();
+      }
+    }, 15000);
+  });
+}
+
+function samStopLambdas(): void {
+  if (samProcess?.connected) {
+    console.log('disconnecting...');
+    samProcess.disconnect();
+  } else {
+    console.log('not disconnecting');
   }
 }
