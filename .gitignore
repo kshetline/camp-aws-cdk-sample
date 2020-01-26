@@ -11,3 +11,4 @@ cdk.out
 /dist
 /template.yaml
 /sam-test/event.json
+/sam-test/env.json

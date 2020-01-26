@@ -2,7 +2,7 @@ import AWS, { Lambda } from 'aws-sdk';
 import chalk from 'chalk';
 import { ChildProcess, exec, execSync } from 'child_process';
 import * as fs from 'fs';
-import { isMatch } from 'lodash';
+import { isEqual, isMatch } from 'lodash';
 
 AWS.config.update({ region: 'none' }); // The region doesn't appear to be used, but needs to be specified anyway.
 
@@ -28,9 +28,10 @@ const lambda = new Lambda({
   maxRetries: 0
 });
 
-let samProcess: ChildProcess = null as any;
+let samProcess: ChildProcess;
+let samProcessEnv: any;
 let pythonProcesses = new Set<string>();
-let samPythonProcessId = '';
+let samPythonProcessId: string;
 let samFailed = false;
 let lines: string[];
 let debugMode = false;
@@ -82,9 +83,9 @@ let successCount = 0;
       }
     }
 
-    // try {
-    //   fs.unlinkSync('sam-test/env.json');
-    // } catch (err) { }
+    try {
+      fs.unlinkSync('sam-test/env.json');
+    } catch (err) { }
 
     lastLine = line;
   }
@@ -123,7 +124,7 @@ async function performLambdaEvent(name: string, fullName: string, eventInfo: any
   ++testCount;
 
   try {
-    await samStartLambdas();
+    await samStartLambdas(eventInfo.env ? { [fullName]: eventInfo.env } : undefined);
   } catch (err) {
     samFailed = true;
     console.error(chalk.red('Failed to start lambdas: ' + err));
@@ -146,11 +147,6 @@ async function performLambdaEvent(name: string, fullName: string, eventInfo: any
     FunctionName: fullName,
     Payload: JSON.stringify(template)
   };
-
-//  if (testParams.env) {
-//    fs.writeFileSync('sam-test/env.json', JSON.stringify({ [fullName]: testParams.env }));
-//    args.push('--env-vars', 'sam-test/env.json');
-//  }
 
   if (testParams.setup) {
     const possiblePromise = testParams.setup();
@@ -240,12 +236,22 @@ async function testSucceeds(expectedResult: any, value: any): Promise<boolean> {
   }
 }
 
-async function samStartLambdas(): Promise<void> {
+async function samStartLambdas(env?: any): Promise<void> {
   if (samProcess) {
-    return;
+    if (isEqual(samProcessEnv, env)) {
+      return;
+    }
+
+    samProcessEnv = env;
+    samStopLambdas();
   }
 
   const args = ['local', 'start-lambda'];
+
+  if (env) {
+    fs.writeFileSync('sam-test/env.json', JSON.stringify(env));
+    args.push('--env-vars', 'sam-test/env.json');
+  }
 
   if (debugMode) {
     args.push('-d', '5858');
@@ -279,24 +285,12 @@ async function samStartLambdas(): Promise<void> {
 
         resolved = true;
         findNewPythonProcess();
-        // samProcess.stderr?.off('data', monitorStderr);
+        samProcess.stderr?.off('data', monitorStderr);
         resolve();
       }
     };
   
     samProcess.stderr?.on('data', monitorStderr);
-
-    // samProcess.stderr?.on('data', data => {
-    //   if (!resolved && !rejected) {
-    //     if (timer) {
-    //       clearTimeout(timer);
-    //       timer = undefined;
-    //     }
-
-    //     rejected = true;
-    //     reject(new Error(data.toString()));
-    //   }
-    // });
 
     timer = setTimeout(() => {
       timer = undefined;
@@ -304,6 +298,7 @@ async function samStartLambdas(): Promise<void> {
       if (!resolved && !rejected) {
         resolved = true;
         findNewPythonProcess();
+        samProcess.stderr?.off('data', monitorStderr);
         resolve();
       }
     }, 15000);
@@ -349,5 +344,8 @@ function samStopLambdas(): void {
         samPythonProcessId = '';
       } catch (err) {}
     }
+
+    samProcess = undefined;
+    pythonProcesses.clear();
   }
 }

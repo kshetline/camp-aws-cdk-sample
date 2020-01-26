@@ -35,7 +35,10 @@ const messageReceiver = new lambda.Function(stack, 'messageReceiver', {
   runtime: lambda.Runtime.NODEJS_12_X,
   handler: 'index.receiveMessage',
   code: lambda.Code.fromAsset('dist/lib/message-receiver'),
-  layers: [commonLayer]
+  layers: [commonLayer],
+  environment: {
+    foo: '-'
+  }
 });
 
 const api = new RestApi(stack, 'camp-aws-sample');
