@@ -6,7 +6,7 @@ import { isEqual, isMatch } from 'lodash';
 
 AWS.config.update({ region: 'none' }); // The region doesn't appear to be used, but needs to be specified anyway.
 
-const TEST_PROPERTIES = ['testName', 'env', 'setup', 'expectedStatus', 'expectedResult', 'displayResult'];
+const TEST_PROPERTIES = ['testName', 'env', 'setup', 'expectedStatus', 'expectedResult', 'displayResult', 'eventPath'];
 
 // Register tests in testEventInfo:
 //   testName: require('./test-file-name.stest').default,
@@ -216,6 +216,15 @@ function extractTestParams(eventInfo: any): any {
       delete eventInfo[property];
     }
   });
+
+  testParams.expectedStatus = testParams.expectedStatus || 200;
+
+  if (testParams.eventPath) {
+    const fileEventInfo = JSON.parse(fs.readFileSync(testParams.eventPath).toString('utf-8'));
+    Object.assign(eventInfo, fileEventInfo);
+    delete testParams.eventPath;
+    console.log(JSON.stringify(eventInfo, null, 2));
+  }
 
   testParams.expectedStatus = testParams.expectedStatus || 200;
 
